@@ -1,17 +1,19 @@
 package infrastructure
 
 import (
-	"context"
 	"encoding/json"
-	"io"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/pkg/errors"
 
 	"github.com/websmee/rest-service/domain/remote"
 )
+
+const getObjectTimeout = 5 * time.Second
 
 type remoteObjectRepository struct {
 	httpClient http.Client
@@ -25,57 +27,43 @@ type remoteObjectResponse struct {
 
 func NewRemoteObjectRepository(baseURL string) remote.Repository {
 	return &remoteObjectRepository{
-		httpClient: http.Client{},
+		httpClient: http.Client{Timeout: getObjectTimeout},
 		baseURL:    baseURL,
 	}
 }
 
-func (r remoteObjectRepository) GetByID(ctx context.Context, id int64) (*remote.Object, error) {
-	respChan := make(chan []byte)
-	errorChan := make(chan error)
-
-	go r.makeRequest(http.MethodGet, "/objects/"+strconv.Itoa(int(id)), nil, respChan, errorChan)
-	select {
-	case <-ctx.Done():
-		return nil, errors.New("GetByID context canceled")
-	case err := <-errorChan:
-		return nil, err
-	case responseBody := <-respChan:
-		var response remoteObjectResponse
-		if err := json.Unmarshal(responseBody, &response); err != nil {
-			return nil, errors.Wrap(err, "GetByID unmarshal failed")
-		}
-
-		return &remote.Object{
-			ID:     response.ID,
-			Online: response.Online,
-		}, nil
+func (r remoteObjectRepository) GetByID(id int64) (*remote.Object, error) {
+	responseBody, err := r.makeRequest("/objects/" + strconv.Itoa(int(id)))
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("GetByID request failed for id=%d", id))
 	}
+
+	var response remoteObjectResponse
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("GetByID unmarshal failed for id=%d", id))
+	}
+
+	return &remote.Object{
+		ID:     response.ID,
+		Online: response.Online,
+	}, nil
 }
 
-func (r remoteObjectRepository) makeRequest(method, path string, requestBody io.Reader, respChan chan<- []byte, errorChan chan<- error) {
-	url := r.baseURL + path
-	request, err := http.NewRequest(method, url, requestBody)
+func (r remoteObjectRepository) makeRequest(path string) ([]byte, error) {
+	response, err := http.Get(r.baseURL + path)
 	if err != nil {
-		errorChan <- errors.Wrap(err, "makeRequest failed")
-		return
-	}
-
-	request.Header.Add("Accept", "application/json")
-	request.Header.Add("Content-Type", "application/json")
-
-	response, err := r.httpClient.Do(request)
-	if err != nil {
-		errorChan <- errors.Wrap(err, "makeRequest do failed")
-		return
+		return nil, err
 	}
 	defer response.Body.Close()
 
 	responseBody, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		errorChan <- errors.Wrap(err, "makeRequest read failed")
-		return
+		return nil, err
 	}
 
-	respChan <- responseBody
+	if response.StatusCode != http.StatusOK {
+		return nil, errors.New(fmt.Sprintf("request failed code=%d, msg='%s'", response.StatusCode, responseBody))
+	}
+
+	return responseBody, nil
 }

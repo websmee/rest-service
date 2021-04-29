@@ -1,7 +1,6 @@
 package interfaces
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -14,12 +13,11 @@ import (
 )
 
 type httpHandler struct {
-	ctx     context.Context
-	service *app.ObjectProcessor
+	objectProcessor *app.ObjectProcessor
 }
 
-func NewHTTPHandler(ctx context.Context, service *app.ObjectProcessor) *httpHandler {
-	return &httpHandler{ctx, service}
+func NewHTTPHandler(objectProcessor *app.ObjectProcessor) *httpHandler {
+	return &httpHandler{objectProcessor}
 }
 
 type callbackRequest struct {
@@ -32,6 +30,11 @@ type callbackResponse struct {
 }
 
 func (h httpHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		h.writeResponse(w, false, []error{errors.Wrap(err, "request read failed")})
@@ -44,12 +47,13 @@ func (h httpHandler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	errs := h.service.Process(h.ctx, cr.ObjectIDs)
+	errs := h.objectProcessor.Process(cr.ObjectIDs)
 	if len(errs) > 0 {
 		h.writeResponse(w, false, errs)
 		return
 	}
 
+	log.Printf("processed %d", len(cr.ObjectIDs))
 	h.writeResponse(w, true, nil)
 }
 

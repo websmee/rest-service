@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"time"
 
 	"github.com/websmee/rest-service/domain/local"
@@ -17,6 +16,6 @@ func NewExpiredObjectsRemover(localObjectRepository local.Repository) *ExpiredOb
 	return &ExpiredObjectsRemover{localObjectRepository}
 }
 
-func (r ExpiredObjectsRemover) RemoveExpired(ctx context.Context) error {
-	return r.localObjectRepository.RemoveExpired(ctx, notSeenPeriod)
+func (r ExpiredObjectsRemover) RemoveExpired() (int, error) {
+	return r.localObjectRepository.RemoveExpired(notSeenPeriod)
 }

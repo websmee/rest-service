@@ -1,0 +1,10 @@
+version: '3'
+
+services:
+  rest-service-db:
+    image: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: "rest-service"
+      POSTGRES_PASSWORD: "rest-service"

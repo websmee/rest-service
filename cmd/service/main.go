@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"os"
@@ -16,14 +15,6 @@ import (
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-		<-c
-		cancel()
-	}()
-
 	db := pg.Connect(&pg.Options{
 		User:     "rest-service",
 		Password: "rest-service",
@@ -31,18 +22,28 @@ func main() {
 	})
 	defer db.Close()
 
+	if err := infrastructure.Migrate(db, "migrations/"); err != nil {
+		log.Println(err)
+		return
+	}
+
 	handler := interfaces.NewHTTPHandler(
-		ctx,
 		app.NewObjectProcessor(
 			infrastructure.NewLocalObjectRepository(db),
 			infrastructure.NewRemoteObjectRepository("http://localhost:9010"),
-			100,
 		),
 	)
 
 	h := http.NewServeMux()
 	h.HandleFunc("/callback", handler.HandleCallback)
-	if err := http.ListenAndServe(":9090", h); err != nil {
-		log.Println(err)
-	}
+	go func() {
+		if err := http.ListenAndServe(":9090", h); err != nil {
+			log.Println(err)
+		}
+	}()
+
+	// wait for OS interrupt/terminate signal
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+	<-c
 }

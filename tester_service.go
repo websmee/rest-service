@@ -16,7 +16,8 @@ func main() {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	go func() {
-		client := &http.Client{Timeout: 1 * time.Second}
+		//client := &http.Client{Timeout: 1 * time.Second}
+		client := &http.Client{}
 
 		for {
 			time.Sleep(5 * time.Second)
@@ -38,7 +39,7 @@ func main() {
 	http.HandleFunc("/objects/", func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(time.Duration(rng.Int63n(4000)+300) * time.Millisecond)
 
-		idRaw := strings.TrimPrefix(r.URL.Path, "/object/")
+		idRaw := strings.TrimPrefix(r.URL.Path, "/objects/")
 		id, err := strconv.Atoi(idRaw)
 		if err != nil {
 			http.Error(w, "invalid id", http.StatusBadRequest)

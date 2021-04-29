@@ -1,7 +1,6 @@
 package infrastructure
 
 import (
-	"context"
 	"time"
 
 	"github.com/go-pg/pg/v9"
@@ -18,19 +17,23 @@ func NewLocalObjectRepository(db *pg.DB) local.Repository {
 	return &localObjectRepository{db}
 }
 
-func (r localObjectRepository) InsertOrUpdate(_ context.Context, object local.Object) error {
+func (r localObjectRepository) InsertOrUpdate(object local.Object) error {
 	_, err := r.db.Model(&object).
-		OnConflict("(ID) DO UPDATE").
+		OnConflict("(id) DO UPDATE").
 		Set("last_seen = EXCLUDED.last_seen").
 		Insert()
 
 	return errors.Wrap(err, "InsertOrUpdate failed")
 }
 
-func (r localObjectRepository) RemoveExpired(_ context.Context, notSeenPeriod time.Duration) error {
-	_, err := r.db.Model(&local.Object{}).
+func (r localObjectRepository) RemoveExpired(notSeenPeriod time.Duration) (int, error) {
+	res, err := r.db.Model(&local.Object{}).
 		Where("last_seen < ?", time.Now().Add(-notSeenPeriod)).
 		Delete()
 
-	return errors.Wrap(err, "RemoveExpired failed")
+	if err != nil {
+		return 0, errors.Wrap(err, "RemoveExpired failed")
+	}
+
+	return res.RowsAffected(), nil
 }
